@@ -9,11 +9,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/go-redis/redis"
+	"gopkg.in/redis.v3"
 )
 
-var luaRefresh = redis.NewScript(`if redis.call("get", KEYS[1]) == ARGV[1] then return redis.call("pexpire", KEYS[1], ARGV[2]) else return 0 end`)
-var luaRelease = redis.NewScript(`if redis.call("get", KEYS[1]) == ARGV[1] then return redis.call("del", KEYS[1]) else return 0 end`)
+var luaRefresh = `if redis.call("get", KEYS[1]) == ARGV[1] then return redis.call("pexpire", KEYS[1], ARGV[2]) else return 0 end`
+var luaRelease = `if redis.call("get", KEYS[1]) == ARGV[1] then return redis.call("del", KEYS[1]) else return 0 end`
 
 var emptyCtx = context.Background()
 
@@ -171,7 +171,7 @@ func (l *Locker) create(ctx context.Context) (bool, error) {
 
 func (l *Locker) refresh(ctx context.Context) (bool, error) {
 	ttl := strconv.FormatInt(int64(l.opts.LockTimeout/time.Millisecond), 10)
-	status, err := luaRefresh.Run(l.client, []string{l.key}, l.token, ttl).Result()
+	status, err := l.client.Eval(luaRelease, []string{l.key}, l.token, ttl).Result()
 	if err != nil {
 		return false, err
 	} else if status == int64(1) {
@@ -190,8 +190,7 @@ func (l *Locker) obtain(token string) (bool, error) {
 
 func (l *Locker) release() error {
 	defer l.reset()
-
-	res, err := luaRelease.Run(l.client, []string{l.key}, l.token).Result()
+	res, err := l.client.Eval(luaRelease, []string{l.key}, l.token).Result()
 	if err == redis.Nil {
 		return ErrLockUnlockFailed
 	}
