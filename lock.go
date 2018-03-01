@@ -28,8 +28,7 @@ var (
 // RedisClient is a minimal client interface.
 type RedisClient interface {
 	SetNX(key string, value interface{}, expiration time.Duration) *redis.BoolCmd
-	Eval(script string, keys []string, args ...interface{}) *redis.Cmd
-	EvalSha(sha1 string, keys []string, args ...interface{}) *redis.Cmd
+	Eval(script string, keys []string, args []string) *redis.Cmd
 	ScriptExists(scripts ...string) *redis.BoolSliceCmd
 	ScriptLoad(script string) *redis.StringCmd
 }
@@ -171,7 +170,7 @@ func (l *Locker) create(ctx context.Context) (bool, error) {
 
 func (l *Locker) refresh(ctx context.Context) (bool, error) {
 	ttl := strconv.FormatInt(int64(l.opts.LockTimeout/time.Millisecond), 10)
-	status, err := l.client.Eval(luaRelease, []string{l.key}, l.token, ttl).Result()
+	status, err := l.client.Eval(luaRelease, []string{l.key}, []string{l.token, ttl}).Result()
 	if err != nil {
 		return false, err
 	} else if status == int64(1) {
@@ -190,7 +189,7 @@ func (l *Locker) obtain(token string) (bool, error) {
 
 func (l *Locker) release() error {
 	defer l.reset()
-	res, err := l.client.Eval(luaRelease, []string{l.key}, l.token).Result()
+	res, err := l.client.Eval(luaRelease, []string{l.key}, []string{l.token}).Result()
 	if err == redis.Nil {
 		return ErrLockUnlockFailed
 	}
